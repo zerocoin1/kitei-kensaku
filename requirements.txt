@@ -1,0 +1,9 @@
+# RAG検索アプリ 依存ライブラリ（軽量構成）
+# バージョンは動作確認しやすいよう下限指定。本番運用時は "==" で固定推奨。
+streamlit>=1.40
+google-genai>=1.0
+numpy>=1.26
+pypdf>=5.1
+# Google Drive連携（SOURCE_MODE="drive" のときのみ必要）
+google-api-python-client>=2.150
+google-auth>=2.35

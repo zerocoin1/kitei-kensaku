@@ -1,0 +1,18 @@
+# 機密：絶対にGitHubへ上げない
+.streamlit/secrets.toml
+*.json.key
+service_account*.json
+# サービスアカウント鍵（あらゆる形式・念のため広めに除外）
+*.iam.gserviceaccount.com.json
+kitei-kensaku-*.json
+*-service-account*.json
+
+# データ・生成物（再構築可能）
+data/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
