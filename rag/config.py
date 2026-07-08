@@ -52,10 +52,10 @@ PRODUCT_OTHER = "その他"      # どのルールにも一致しなかったフ
 
 # ---- モデル設定 ----
 # 生成モデル。新しいモデルが出たらここを差し替えるだけでOK。
-#   "gemini-3-flash-preview" … 無料枠で使える最新の3 Flash（パイロット推奨）
-#   "gemini-3.5-flash"        … 最新・高品質だが有料（本番展開時の選択肢）
-#   "gemini-2.5-flash"        … 一つ前の世代（無料）
-LLM_MODEL = "gemini-3-flash-preview"
+#   "gemini-2.5-flash"        … 安定版。信頼性が高く安価（本番採用・推奨）
+#   "gemini-3.5-flash"        … 最新・高品質だが高価（同等品質なら2.5で十分）
+#   "gemini-3-flash-preview"  … 試験版。橋渡しは賢いが不安定（詰まることあり）
+LLM_MODEL = "gemini-2.5-flash"
 # 埋め込み（ベクトル化）モデル。※text-embedding-004は現行APIで廃止。
 #   "gemini-embedding-001" … 現行の安定版（実証済み）
 EMBED_MODEL = "gemini-embedding-001"
