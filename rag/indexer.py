@@ -19,7 +19,7 @@ from google import genai
 from google.genai import types
 
 from . import config
-from .sources import DocRecord, save_manifest
+from .sources import DocRecord, save_manifest, _combined_signature
 
 
 def _client(api_key: str) -> genai.Client:
@@ -161,7 +161,12 @@ def build_index(records: list[DocRecord], api_key: str) -> dict:
 
     config.INDEX_DIR.mkdir(parents=True, exist_ok=True)
     with open(config.STORE_PATH, "wb") as f:
-        pickle.dump({"vecs": combined, "meta": all_meta, "files": cur_files}, f)
+        pickle.dump({
+            "vecs": combined,
+            "meta": all_meta,
+            "files": cur_files,
+            "manifest_sig": _combined_signature(records),  # 現PDFとの一致判定用
+        }, f)
 
     save_manifest(records)
     return {
@@ -178,3 +183,41 @@ def load_index() -> dict | None:
         return None
     with open(config.STORE_PATH, "rb") as f:
         return pickle.load(f)
+
+
+def download_index_from_drive(sa_info: dict, root_folder_id: str) -> bool:
+    """Driveの親フォルダにある構築済み索引（INDEX_FILE_NAME）をローカルへ取得する。
+
+    見つかってダウンロードできれば True。無ければ False。
+    これにより、Streamlitが再起動で索引を失っても再構築せず即復元できる。
+    """
+    import io
+    from googleapiclient.http import MediaIoBaseDownload
+    from .sources import _drive_service
+
+    service = _drive_service(sa_info)
+    resp = (
+        service.files()
+        .list(
+            q=(
+                f"'{root_folder_id}' in parents "
+                f"and name='{config.INDEX_FILE_NAME}' and trashed=false"
+            ),
+            fields="files(id, name)",
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
+        )
+        .execute()
+    )
+    files = resp.get("files", [])
+    if not files:
+        return False
+
+    config.INDEX_DIR.mkdir(parents=True, exist_ok=True)
+    request = service.files().get_media(fileId=files[0]["id"], supportsAllDrives=True)
+    with io.FileIO(config.STORE_PATH, "wb") as fh:
+        downloader = MediaIoBaseDownload(fh, request)
+        done = False
+        while not done:
+            _, done = downloader.next_chunk()
+    return True

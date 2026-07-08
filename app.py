@@ -40,9 +40,23 @@ def get_sa_info():
 
 
 # ---------- インデックス（プロセス内でキャッシュ）----------
-@st.cache_resource(show_spinner="インデックスを読み込み中…")
-def get_index(cache_bust: str):
-    return indexer.load_index()
+@st.cache_resource(show_spinner="インデックスを準備中…")
+def get_index(_sa_info, root, cache_bust: str):
+    idx = indexer.load_index()
+    if idx is not None:
+        return idx
+    # 再起動でローカル索引が消えた場合、Driveの構築済み索引から復元を試みる（再構築不要）
+    if config.SOURCE_MODE == "drive" and _sa_info and root:
+        try:
+            if indexer.download_index_from_drive(_sa_info, root):
+                idx = indexer.load_index()
+                # 現在のPDFと一致する索引だけ採用（古い索引での誤回答＝先祖返りを防ぐ）
+                if idx and idx.get("manifest_sig") == src.drive_signature(_sa_info, root):
+                    return idx
+                return None
+        except Exception:
+            return None
+    return None
 
 
 def rebuild(api_key: str) -> None:
@@ -98,7 +112,9 @@ def main() -> None:
         st.stop()
 
     api_key = get_api_key()
-    index = get_index(st.session_state.get("cache_bust", "init"))
+    sa = get_sa_info()
+    root = st.secrets.get("drive_root_folder_id")
+    index = get_index(sa, root, st.session_state.get("cache_bust", "init"))
     st.session_state.setdefault("messages", [])  # [{role, content, sources}]
 
     # ===== サイドバー =====
@@ -122,6 +138,21 @@ def main() -> None:
             rebuild(api_key)
         n = len(src.load_manifest().get("records", []))
         st.caption(f"取り込み済みPDF: {n} 件")
+
+        # 構築済み索引をDriveに置いておくと、再起動後も再構築せず即復元できる
+        if config.STORE_PATH.exists():
+            with open(config.STORE_PATH, "rb") as fh:
+                st.download_button(
+                    "📥 索引を保存（Drive用）",
+                    fh.read(),
+                    file_name=config.INDEX_FILE_NAME,
+                    help=(
+                        "ダウンロード後、Driveの親フォルダ（保険規定データ）に"
+                        f"「{config.INDEX_FILE_NAME}」としてアップロードしてください。"
+                        "次回以降、再起動しても再構築せず数秒で復元できます。"
+                        "PDFを改定して「データ更新」した後は、これを再アップロードしてください。"
+                    ),
+                )
 
     # ===== メイン =====
     st.title("📖 規定類 検索チャット")

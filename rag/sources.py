@@ -236,3 +236,23 @@ def collect_records(
             "Driveモードには gcp_service_account と drive_root_folder_id の設定が必要です。"
         )
     return _collect_drive(sa_info, root_folder_id)
+
+
+def drive_signature(sa_info: dict, root_folder_id: str) -> str:
+    """DriveのPDF一覧から合成署名を計算する（ダウンロードせず、md5だけで軽量に）。
+
+    保存済み索引が現在のPDFと一致しているか（先祖返りしていないか）の判定に使う。
+    build_index が索引に埋め込む _combined_signature と同じ形式・同じ値になる。
+    """
+    service = _drive_service(sa_info)
+    found: list[dict] = []
+    _walk_drive(service, root_folder_id, [], found)
+    parts = []
+    for f in found:
+        path = f["path"]
+        if len(path) < 2:
+            continue
+        company, product_type = path[0], path[1]
+        sig = f.get("md5Checksum") or f.get("modifiedTime", "")
+        parts.append(f"{company}/{product_type}/{f['name']}:{sig}")
+    return hashlib.md5("\n".join(sorted(parts)).encode("utf-8")).hexdigest()

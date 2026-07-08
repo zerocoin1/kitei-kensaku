@@ -9,6 +9,8 @@ kitei-kensaku-*.json
 
 # データ・生成物（再構築可能）
 data/
+# 索引ファイル（規定本文を含むため公開リポジトリに入れない）
+*.pkl
 
 # Python
 __pycache__/
