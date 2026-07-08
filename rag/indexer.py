@@ -26,18 +26,23 @@ def _client(api_key: str) -> genai.Client:
     return genai.Client(api_key=api_key)
 
 
+# 埋め込みのレート制御：無料/有料枠の「毎分トークン上限(TPM)」に当たらないよう、
+# 送信ペースを文字数ベースで抑える（char≈tokenの安全側近似）。
+EMBED_BATCH = 30                 # 1リクエストあたりのテキスト数
+EMBED_CHARS_PER_MIN = 600_000    # 1分あたりに送る文字数の上限（実TPM上限より低めに設定）
+
+
 def embed_texts(texts: list[str], api_key: str, task: str) -> np.ndarray:
-    """テキスト群を埋め込みベクトルに変換（バッチ＋リトライ）。
+    """テキスト群を埋め込みベクトルに変換（バッチ＋レート制御＋リトライ）。
 
     task は "RETRIEVAL_DOCUMENT"（索引側）か "RETRIEVAL_QUERY"（質問側）。
     戻り値は L2正規化済みのベクトル（検索時は内積＝コサイン類似度になる）。
     """
     client = _client(api_key)
     out: list[list[float]] = []
-    batch = 50
-    for start in range(0, len(texts), batch):
-        chunk = texts[start:start + batch]
-        for attempt in range(6):
+    for start in range(0, len(texts), EMBED_BATCH):
+        chunk = texts[start:start + EMBED_BATCH]
+        for attempt in range(8):
             try:
                 resp = client.models.embed_content(
                     model=config.EMBED_MODEL,
@@ -49,10 +54,18 @@ def embed_texts(texts: list[str], api_key: str, task: str) -> np.ndarray:
                 )
                 out.extend([e.values for e in resp.embeddings])
                 break
-            except Exception:  # 一時的な混雑(503)等はリトライ
-                if attempt == 5:
+            except Exception as e:
+                if attempt == 7:
                     raise
-                time.sleep(2 * (attempt + 1))
+                msg = str(e)
+                # 429（毎分上限超過）は約1分で回復するので長めに待つ
+                if "429" in msg or "RESOURCE_EXHAUSTED" in msg.upper():
+                    time.sleep(30)
+                else:  # 503などの一時的な混雑
+                    time.sleep(2 * (attempt + 1))
+        # 次のバッチまで、送った文字数に応じて待機し毎分上限の超過を防ぐ
+        chars = sum(len(t) for t in chunk)
+        time.sleep(chars / EMBED_CHARS_PER_MIN * 60)
     arr = np.asarray(out, dtype=np.float32)
     norms = np.linalg.norm(arr, axis=1, keepdims=True)
     norms[norms == 0] = 1.0
