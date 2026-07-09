@@ -110,12 +110,17 @@ def needs_rebuild(records: list[DocRecord]) -> bool:
     return manifest.get("signature") != _combined_signature(records)
 
 
-def _make_record(file_name, company, product_type, local_path, signature) -> DocRecord:
+def _make_record(
+    file_name, company, product_type, local_path, signature, subfolder=None
+) -> DocRecord:
+    # 「会社/種目/商品/」の3階層目（subfolder）があれば、それをそのまま商品とする。
+    # 無ければファイル名・中身から自動判定（自動車保険の既存挙動を維持）。
+    product = subfolder if subfolder else detect_product(file_name, str(local_path))
     return DocRecord(
         file_name=file_name,
         company=company,
         product_type=product_type,
-        product=detect_product(file_name, str(local_path)),
+        product=product,
         page_offset=detect_page_offset(file_name),
         local_path=str(local_path),
         signature=signature,
@@ -134,11 +139,13 @@ def _collect_local() -> list[DocRecord]:
             # 期待構造: pdfs/<会社>/<種目>/xxx.pdf に合わないものはスキップ
             continue
         company, product_type = parts[0], parts[1]
+        # <会社>/<種目>/<商品>/xxx.pdf のように種目の下にフォルダがあれば商品として扱う
+        subfolder = parts[2] if len(parts) >= 4 else None
         stat = pdf.stat()
         records.append(
             _make_record(
                 pdf.name, company, product_type, pdf,
-                f"{stat.st_mtime_ns}:{stat.st_size}",
+                f"{stat.st_mtime_ns}:{stat.st_size}", subfolder,
             )
         )
     return records
@@ -209,7 +216,10 @@ def _collect_drive(sa_info: dict, root_folder_id: str) -> list[DocRecord]:
             # 期待構造: <ルート>/<会社>/<種目>/xxx.pdf に合わないものはスキップ
             continue
         company, product_type = path[0], path[1]
-        local_path = config.PDF_DIR / company / product_type / f["name"]
+        # <会社>/<種目>/<商品>/xxx.pdf のように種目の下にフォルダがあれば商品として扱う
+        subfolder = path[2] if len(path) >= 3 else None
+        rel = [company, product_type] + ([subfolder] if subfolder else []) + [f["name"]]
+        local_path = config.PDF_DIR.joinpath(*rel)
         signature = f.get("md5Checksum") or f.get("modifiedTime", "")
 
         if (
@@ -220,7 +230,9 @@ def _collect_drive(sa_info: dict, root_folder_id: str) -> list[DocRecord]:
             _download(service, f["id"], local_path)
 
         records.append(
-            _make_record(f["name"], company, product_type, local_path, signature)
+            _make_record(
+                f["name"], company, product_type, local_path, signature, subfolder
+            )
         )
     return records
 
