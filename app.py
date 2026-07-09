@@ -99,11 +99,14 @@ def product_options(store, company: str, product_type: str) -> list[str]:
 def render_sources(sources) -> None:
     if not sources:
         return
-    with st.expander("根拠（出典）を表示"):
-        for s in sources:
-            st.markdown(
-                f"- **{s.file_name}** — 資料 P{s.doc_page}（PDF {s.pdf_page}ページ目）"
-            )
+    st.caption("根拠（出典）— 開くと該当ページの原文が見られます")
+    for s in sources:
+        with st.expander(f"📄 {s.file_name} — 資料P{s.doc_page}（PDF {s.pdf_page}ページ目）"):
+            if s.text:
+                st.markdown("**該当ページの原文**")
+                st.text(s.text)
+            else:
+                st.caption("原文テキストがありません。")
 
 
 # ---------- メイン ----------

@@ -96,6 +96,7 @@ class Source:
     file_name: str
     doc_page: int      # 資料上の通しページ（出典表示に使う）
     pdf_page: int      # PDF内の物理ページ（原本を開く時の位置）
+    text: str = ""     # そのページの原文（展開表示用）
 
 
 @dataclass
@@ -207,5 +208,6 @@ def ask(
                     file_name=m["file_name"],
                     doc_page=m["doc_page"],
                     pdf_page=m["pdf_page"],
+                    text=m["text"],
                 ))
     return Answer(text=text, sources=sources)
